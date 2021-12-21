@@ -41,9 +41,44 @@ def sense_obstacles(pos, carAngle, lidarData):
             ydata.append(y2)
         i += 1
     return xdata, ydata
+# genera los puntod necesarios para trazar una recta entre pos_in y pos_goal con una separeacion de H
+def rect_generator(pos_in, pos_goal, H):
+    tolerancia = H
+    xi, yi,_ = pos_in
+    xf, yf,_ = pos_goal
+    m = (yf-yi)/(xf-xi)
+    c = yf - xf*m
     
+    xdata = []
+    ydata = []
+    
+    x0 = xi # x_{k}
+    y0 = yi # y_{k}
+    x = x0
+    y = y0
+    xdata.append(x)
+    ydata.append(y)
+    i = 0
+    while(1):
+        i += 1
+        if(m*m != -1):
+            x = (math.sqrt(-c**2+c*(2*y-2*m*x0)+H**2*(m**2+1)-(y0-m*x0)**2) - c*m+m*y0+x0)/(m*m+1)  # x_{k+1}
+        
+        y = x*m+c
 
-  
+        xdata.append(x)
+        ydata.append(y)
+
+        x0 = x
+        y0 = y
+
+        print(x, y)
+
+        if( (x >= xf-tolerancia/2 and x <= xf+tolerancia/2) and (y >= yf-tolerancia/2 and y <= yf+tolerancia/2) ):
+            break
+    return xdata, ydata
+        
+
 #establecemos la conexion con coppeliasim
 clientID = connect(19999)
 #obtener el handler para el car-like
@@ -64,6 +99,12 @@ steer_angle=0
 motor_velocity=0#dVel*10
 brake_force=0
 
+#para el algoritmo de bug 1 (tangente)
+returnCode, goal_handler = sim.simxGetObjectHandle(clientID,'ReferenceFrame', sim.simx_opmode_blocking) #objeto que representa la meta ( goal)
+returnCode, posGoal = sim.simxGetObjectPosition(clientID, goal_handler, -1, sim.simx_opmode_blocking) # extraemos la posicion de la meta ( goal)
+
+xgoal  = []
+ygoal  = []
 #inicializaciones de handlers y otros datos a extraer de coppelia
 returnCode, manta_handler = sim.simxGetObjectHandle(clientID,'Manta', sim.simx_opmode_blocking) #car like manta
 returnCode, lidar_handler = sim.simxGetObjectHandle(clientID,'fastHokuyo', sim.simx_opmode_blocking) #gps
@@ -82,7 +123,7 @@ plt.ylim(-10,10)
 plt.xlim(-10,10)
 
 angle = 0 #inicializacion, angulo que indica direccion del carlike respcto al eje x
-
+once = True
 while(1):  # making a loop
 
     time.sleep(0.1)    
@@ -142,17 +183,24 @@ while(1):  # making a loop
     #obtenemos el angulo de la puta del auto respecto al centro del cuerpo ( respecto al eje x)
     xf,yf,_ = pos
     xi,yi,_ = bodyPos
+    xg, yg,_ = posGoal
     if (xf != 0):
         angle = math.atan2(yf-yi,xf-xi)
     
     lidarData = clear_sensor(ranges,3)   # solo nos quedamos con un rango especifico de valores detectados por lidar 
 
+    if(once):
+        xgoal, ygoal = rect_generator(pos, posGoal, 0.5)
+        once = False
+
     # x, y representan las posiciones de los obstaculos detectados por lidar
     x = []
     y = []
     x, y = sense_obstacles(pos, angle, lidarData)
-
+    
     # Dibuja el resultado
+    plt.scatter(xgoal, ygoal, c="blue")
+    plt.scatter(xg, yg, c="purple") # punto de la meta
     plt.scatter(xf,yf,c="red") # posicion del sensor lidar en el mapa
     plt.scatter(x,y,c="black") # posicion de los obstaculos detectados por lidar
     figure.canvas.draw()
