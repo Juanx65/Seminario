@@ -47,11 +47,9 @@ def rect_generator(pos_in, pos_goal, H):
     tolerancia = H
     xi, yi,_ = pos_in
     xf, yf,_ = pos_goal
-    if(xf-xi != 0 ):
-        m = (yf-yi)/(xf-xi)
-    else:
-        m = 999999999999999
-    c = yf - xf*m
+    
+    alpha = math.atan2((yf-yi),(xf-xi))
+    
 
     xdata = []
     ydata = []
@@ -59,16 +57,17 @@ def rect_generator(pos_in, pos_goal, H):
     
     x0 = xi # x_{k}
     y0 = yi # y_{k}
-    x = x0
-    y = y0
-    while(1):
-        if(m*m != -1):
-            x = (math.sqrt(-c**2+c*(2*y-2*m*x0)+H**2*(m**2+1)-(y0-m*x0)**2) - c*m+m*y0+x0)/(m*m+1)  # x_{k+1}
-        
-        y = x*m+c
 
-        th = math.atan2((y-y0),(x-x0))
-        #print(th)
+    #print("entre")
+    while(1):
+        
+        x = math.cos(alpha)*H + x0
+        y = math.sin(alpha)*H + y0
+
+        if((y-y0) != 0 and (x-x0) != 0):
+            th = math.atan2((y-y0),(x-x0))
+        else:
+            th = 0
 
         xdata.append(x)
         ydata.append(y)
@@ -76,9 +75,14 @@ def rect_generator(pos_in, pos_goal, H):
 
         x0 = x
         y0 = y
-
-        if( (x >= xf-tolerancia/2 and x <= xf+tolerancia/2) and (y >= yf-tolerancia/2 and y <= yf+tolerancia/2) ):
+        if( (np.linalg.norm(np.array((x,y))-np.array((xf,yf))) < 2*H)):
             break
+        elif( ( (x >= xf-tolerancia and x <= xf+tolerancia) and (y >= yf-tolerancia and y <= yf+tolerancia) ) ):
+            break
+    #print("sali")
+    xdata.append(xf)
+    ydata.append(yf)
+    thdata.append(th)
     return xdata, ydata, thdata
         
 def calculate_vs (x0,y0,th0,x,y,th,dT):
@@ -102,12 +106,26 @@ def init_motor(brake_force,motor_velocity):
     sim.simxSetJointMaxForce(clientID, br_brake_handle, brake_force, sim.simx_opmode_oneshot)
     sim.simxSetJointMaxForce(clientID, bl_brake_handle, brake_force, sim.simx_opmode_oneshot)
 
+def rodear_matriz(pos, pos_obs):
+    xi, yi,_ = pos
+    xo, yo,_ = pos_obs
+    
+    x = xo-xi
+    y = yo-yi
+
+    xn = -y
+    yn = x
+
+    xn = xn + xi
+    yn = yn + yi
+    return xn, yn
+
 def rodear_obstaculo(pos, alpha, H):
     x, y, _ = pos
     if(alpha != 0):
         c = y-math.tan(math.pi/2+alpha)*x
     else:
-        c = y-999999999*x
+        c = y-float("inf")*x
 
     if(alpha != 0):
         sin = math.sin(alpha)
@@ -169,11 +187,14 @@ plt.xlim(-10,10)
 angle = 0 #inicializacion, angulo que indica direccion del carlike respcto al eje x
 dT = 0.15
 lidarRango = 3 # rango de deteccion de lidar
+paso_recta = 0.7
 
 x = []
 y = []
 once = True
 again = False
+obstaculo = True
+obstaculos = []
 
 sim.simxSetJointMaxForce(clientID, motor_handle, motor_torque, sim.simx_opmode_oneshot)
     
@@ -196,39 +217,44 @@ while(1):  # making a loop
     x, y = sense_obstacles(pos, angle, lidarData, lidarRango)
 
     if(once):
-        dT = 0.15
-        init_motor(0,0)
-        xgoal, ygoal, thgoal = rect_generator(pos, posGoal, 0.7)
+        xgoal, ygoal, thgoal = rect_generator(pos, posGoal, paso_recta)
         once = False
         lenLine =  len(xgoal)
         i = 0
-    
-    for j in range(len(x)-1):
-        if(i < lenLine):
-            if(x[j] >= xgoal[i] - 0.5 and x[j] <= xgoal[i] + 0.5) and (y[j] >= ygoal[i]- 0.5 and y[j] <= ygoal[i]+ 0.5):
-                x_rodear, y_rodear = rodear_obstaculo(pos, angle, 4)
-                xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], 4)
-                again = True
-                lenLine =  len(xgoal)
-                i=0
-                dT = 0.5
-                break
-    
-    if(i < lenLine):
-        motor_velocity, steer_angle = calculate_vs(xf,yf,angle,xgoal[i],ygoal[i],thgoal[i],dT)
-
+    if(i < lenLine and obstaculo):
+        for j in range(len(x)):   
+            if(x[j] >= xgoal[i] - paso_recta/2 and x[j] <= xgoal[i] + paso_recta/2) and (y[j] >= ygoal[i]- paso_recta/2 and y[j] <= ygoal[i]+ paso_recta/2):
+                #init_motor(100,0)
+                obstaculos.append(j)
+        l = math.floor((len(obstaculos)-1)/2)
+        if(l > 0):
+            k = obstaculos[l]
+            x_rodear, y_rodear = rodear_matriz(pos, [x[k],y[k],_])
+            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso_recta)
+            again = True
+            lenLine =  len(xgoal)
+            i=0
+            obstaculo = False
+        obstaculos.clear()
+        
     if(i >= lenLine):
         if(again):
             once = True
             again = False
-        init_motor(100,0)
-        i = lenLine
+            obstaculo = True
+        else:
+            init_motor(100,0)
+            i = lenLine
+    else:
+        init_motor(0,0)
+        motor_velocity, steer_angle = calculate_vs(xf,yf,angle,xgoal[i],ygoal[i],thgoal[i],dT)
+        i += 1
     #--aplicamos velocidad al motor
     sim.simxSetJointTargetPosition(clientID, steer_handle, steer_angle, sim.simx_opmode_oneshot )
     sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)  
       
     time.sleep(dT)
-    i += 1
+  
 
     # Dibuja el resultado
     plt.scatter(xgoal, ygoal, c="blue")
