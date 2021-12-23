@@ -120,6 +120,62 @@ def rodear_paralelo(pos, pos_obs, co):
     yn = yo - H*math.sin(alpha)
     return xn, yn
 
+def rodear_obstaculo(camino, dT, paso):
+
+    lidarRango = 3
+    #listas de posiciones
+    xc, yc, thc = camino
+
+    enCamino = False
+    obstaculos = []
+    x_rodear = []
+    y_rodear = []
+    while(~enCamino):
+        _, pos = sim.simxGetObjectPosition(clientID, lidar_handler, -1, sim.simx_opmode_blocking)
+        _, bodyPos = sim.simxGetObjectPosition(clientID, manta_handler,-1, sim.simx_opmode_blocking)
+        _, ranges = sim.simxGetStringSignal(clientID, 'scan ranges', sim.simx_opmode_buffer)
+        ranges = sim.simxUnpackFloats(ranges)
+
+        #pos actual
+        x, y,_ = pos
+        xi,yi,_ = bodyPos
+        angle = math.atan2(y-yi,x-xi)
+
+        lidarData = clear_sensor(ranges,lidarRango)
+        xo, yo = sense_obstacles(pos, angle, lidarData)
+
+        for i in range(len(camino)):
+            if(x >= xc[i] - paso and x <= xc[i] + paso) and (y >= yc[i] - paso and y <= yc[i] + paso):
+                enCamino = True
+                return i
+        
+        for i in range(len(xo)):
+            obstaculos.append(i)
+            #init_motor(100,0)
+        obs = len(obstaculos)
+        if(obs > 0):
+            l = math.floor(obs/2)
+            k = obstaculos[l]
+            x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], lidarRango)
+            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso)
+            obstaculos.clear()
+            obs = 0
+        
+        init_motor(0,0)
+        for i in range(len(xgoal)):
+            motor_velocity, steer_angle = calculate_vs(x,y,angle,xgoal[i],ygoal[i],thgoal[i],dT)
+            #--aplicamos velocidad al motor
+            sim.simxSetJointTargetPosition(clientID, steer_handle, steer_angle, sim.simx_opmode_oneshot )
+            sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)  
+      
+            time.sleep(dT)
+
+            # Dibuja el resultado
+            plt.scatter(xgoal, ygoal, c="cyan")
+            plt.scatter(x,y,c="red") # posicion del sensor lidar en el mapa
+            plt.scatter(xo,yo,c="black") # posicion de los obstaculos detectados por lidar
+            figure.canvas.draw()
+            figure.canvas.flush_events()  
 
 #establecemos la conexion con coppeliasim
 clientID = connect(19999)
@@ -204,30 +260,16 @@ while(1):  # making a loop
         
         for j in range(len(x)):   
             if(x[j] >= xgoal[i] - paso_recta and x[j] <= xgoal[i] + paso_recta) and (y[j] >= ygoal[i] - paso_recta and y[j] <= ygoal[i]+ paso_recta):
-                init_motor(100,0)
-                obstaculos.append(j)
-        obs = len(obstaculos)
-        if(obs > 0):
-            l = math.floor(obs/2)
-            k = obstaculos[l]
-            x_rodear, y_rodear = rodear_paralelo(pos, [x[k],y[k]], 2*paso_recta)
-            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso_recta)
-            lenLine =  len(xgoal)
-            i=0
-            obstaculos.clear()
-            again = True
+                i = rodear_obstaculo([xgoal, ygoal, thgoal],dT, paso_recta)
+                break 
 
-        init_motor(0,0)
+        init_motor(0,0) 
         motor_velocity, steer_angle = calculate_vs(xf,yf,angle,xgoal[i],ygoal[i],thgoal[i],dT)
         i += 1
 
     else:
-        if(again):
-            once = True
-            again = False
-        else:
-            init_motor(100,0)
-            break
+        init_motor(100,0)
+        break
     #--aplicamos velocidad al motor
     sim.simxSetJointTargetPosition(clientID, steer_handle, steer_angle, sim.simx_opmode_oneshot )
     sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)  
@@ -241,4 +283,4 @@ while(1):  # making a loop
     plt.scatter(xf,yf,c="red") # posicion del sensor lidar en el mapa
     plt.scatter(x,y,c="black") # posicion de los obstaculos detectados por lidar
     figure.canvas.draw()
-    figure.canvas.flush_events()
+    figure.canvas.flush_events()   

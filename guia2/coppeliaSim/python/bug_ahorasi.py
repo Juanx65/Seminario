@@ -21,8 +21,8 @@ def connect(port):
     if clientID == 0: print("conectado a", port)
     else: print("no se pudo conectar")
     return clientID
-
- # dist = distancia maxima para detectar objetos
+    
+# dist = distancia maxima para detectar objetos
 def clear_sensor(array, dist):
     for i in range(len(array)):
         if array[i] > dist:
@@ -42,6 +42,7 @@ def sense_obstacles(pos, carAngle, lidarData):
             ydata.append(y2)
         i += 1
     return xdata, ydata
+
 # genera los puntod necesarios para trazar una recta entre pos_in y pos_goal con una separeacion de H
 def rect_generator(pos_in, pos_goal, H):
     tolerancia = H
@@ -83,7 +84,8 @@ def rect_generator(pos_in, pos_goal, H):
     ydata.append(yf)
     thdata.append(th)
     return xdata, ydata, thdata
-        
+
+# calcula la velocidad necesaria para llegar del punto x,y,Th al x0,y0,Th0
 def calculate_vs (x0,y0,th0,x,y,th,dT):
     d = 0.6 # distancia entre las ruedas [m]
 
@@ -103,12 +105,14 @@ def calculate_vs (x0,y0,th0,x,y,th,dT):
         V = float("inf")
     return V, alpha
 
-def init_motor(brake_force,motor_velocity):
-    sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)
+# permite frenar o dar velocidad al motor
+def init_motor(brake_force,motor_velocity,steer_angle):
     sim.simxSetJointMaxForce(clientID, fr_brake_handle, brake_force, sim.simx_opmode_oneshot)
     sim.simxSetJointMaxForce(clientID, fl_brake_handle, brake_force, sim.simx_opmode_oneshot)
     sim.simxSetJointMaxForce(clientID, br_brake_handle, brake_force, sim.simx_opmode_oneshot)
     sim.simxSetJointMaxForce(clientID, bl_brake_handle, brake_force, sim.simx_opmode_oneshot)
+    sim.simxSetJointTargetPosition(clientID, steer_handle, steer_angle, sim.simx_opmode_oneshot )
+    sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)
 
 def rodear_paralelo(pos, pos_obs, co):
     x, y,_ = pos
@@ -120,6 +124,61 @@ def rodear_paralelo(pos, pos_obs, co):
     yn = yo - H*math.sin(alpha)
     return xn, yn
 
+# trata de rodear el obstaculo
+def rodear_obstaculo(camino,l ,dT, paso, lidarRango):
+
+    #listas de posiciones
+    xc, yc, thc = camino
+
+    enCamino = False
+    obstaculos = []
+    x_rodear = []
+    y_rodear = []
+    while(~enCamino):
+        _, pos = sim.simxGetObjectPosition(clientID, lidar_handler, -1, sim.simx_opmode_blocking)
+        _, bodyPos = sim.simxGetObjectPosition(clientID, manta_handler,-1, sim.simx_opmode_blocking)
+        _, ranges = sim.simxGetStringSignal(clientID, 'scan ranges', sim.simx_opmode_buffer)
+        ranges = sim.simxUnpackFloats(ranges)
+
+        #pos actual
+        x, y,_ = pos
+        xi,yi,_ = bodyPos
+        angle = math.atan2(y-yi,x-xi)
+
+        lidarData = clear_sensor(ranges,lidarRango)
+        xo, yo = sense_obstacles(pos, angle, lidarData)
+
+        for i in range(len(xc[l:])):
+            if(x >= xc[i+l] - paso and x <= xc[i+l] + paso) and (y >= yc[i+l] - paso and y <= yc[i+l] + paso):
+                enCamino = True
+                return i
+        
+        for i in range(len(xo)):
+            obstaculos.append(i)
+        obs = len(obstaculos)
+        if(obs > 0):
+            l = math.floor(obs/2)
+            k = obstaculos[l]
+            x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], lidarRango)
+            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso)
+            obstaculos.clear()
+            obs = 0
+        
+        init_motor(0,0,0)
+        for i in range(len(xgoal)):
+            motor_velocity, steer_angle = calculate_vs(x,y,angle,xgoal[i],ygoal[i],thgoal[i],dT)
+            #--aplicamos velocidad al motor
+            sim.simxSetJointTargetPosition(clientID, steer_handle, steer_angle, sim.simx_opmode_oneshot )
+            sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)  
+      
+            time.sleep(dT)
+
+            # Dibuja el resultado
+            plt.scatter(xgoal, ygoal, c="cyan")
+            plt.scatter(x,y,c="red") # posicion del sensor lidar en el mapa
+            plt.scatter(xo,yo,c="black") # posicion de los obstaculos detectados por lidar
+            figure.canvas.draw()
+            figure.canvas.flush_events()  
 
 #establecemos la conexion con coppeliasim
 clientID = connect(19999)
@@ -143,10 +202,7 @@ brake_force=0
 
 #para el algoritmo de bug 1 (tangente)
 _, goal_handler = sim.simxGetObjectHandle(clientID,'ReferenceFrame', sim.simx_opmode_blocking) #objeto que representa la meta ( goal)
-_, posGoal = sim.simxGetObjectPosition(clientID, goal_handler, -1, sim.simx_opmode_blocking) # extraemos la posicion de la meta ( goal)
-
-xgoal  = []
-ygoal  = []
+    
 #inicializaciones de handlers y otros datos a extraer de coppelia
 _, manta_handler = sim.simxGetObjectHandle(clientID,'Manta', sim.simx_opmode_blocking) #car like manta
 _, lidar_handler = sim.simxGetObjectHandle(clientID,'fastHokuyo', sim.simx_opmode_blocking) #gps
@@ -158,87 +214,66 @@ _, ranges = sim.simxGetStringSignal(clientID, 'scan ranges', sim.simx_opmode_buf
 #Convertir cadena a lista flotante, el valor en la lista es el valor medido del radar
 ranges = sim.simxUnpackFloats(ranges)
 
-#inicializacion animacion usando scatter
+sim.simxSetJointMaxForce(clientID, motor_handle, motor_torque, sim.simx_opmode_oneshot)
+
+#Inicializacion de animacion usando scatter
 plt.ion()
 figure = plt.figure(figsize=(10,10))
 plt.ylim(-10,10)
 plt.xlim(-10,10)
 
-angle = 0 #inicializacion, angulo que indica direccion del carlike respcto al eje x
-dT = 0.15
-lidarRango = 5 # rango de deteccion de lidar
-paso_recta = 0.7
+# inicializacion de variables
 
-x = []
-y = []
-once = True
-again = False
-obstaculos = []
+angle = 0 # representa la direccion del carlike respecto al origen
+dT = 0.15 # delta de tiempo para las velocidades
+lidarRango = 3 # rango del sensor lidar a detectar
+paso = 0.7  # paso de cada punto al generar los caminos
+xgoal  = []
+ygoal  = []
+l = 0 # contador para seguir la linea
 
-sim.simxSetJointMaxForce(clientID, motor_handle, motor_torque, sim.simx_opmode_oneshot)
+_, posGoal = sim.simxGetObjectPosition(clientID, goal_handler, -1, sim.simx_opmode_blocking) # extraemos la posicion de la meta ( goal)
+_, pos = sim.simxGetObjectPosition(clientID, lidar_handler, -1, sim.simx_opmode_blocking)
+_, bodyPos = sim.simxGetObjectPosition(clientID, manta_handler,-1, sim.simx_opmode_blocking)
+xgoal, ygoal, thgoal = rect_generator(pos, posGoal, paso)
+
+while(l < len(xgoal)): #loop para mover carlike hasta q termine el algortmo 
     
-while(1):  # making a loop
-
     #posicion actual de manta:
     _, pos = sim.simxGetObjectPosition(clientID, lidar_handler, -1, sim.simx_opmode_blocking)
     _, bodyPos = sim.simxGetObjectPosition(clientID, manta_handler,-1, sim.simx_opmode_blocking)
     _, ranges = sim.simxGetStringSignal(clientID, 'scan ranges', sim.simx_opmode_buffer)
     ranges = sim.simxUnpackFloats(ranges)
 
-    #obtenemos el angulo de la puta del auto respecto al centro del cuerpo ( respecto al eje x)
-    xf,yf,_ = pos
-    xi,yi,_ = bodyPos
+    #inicializaciones
+    x,y,_ = pos
+    xb,yb,_ = bodyPos
     xg, yg,_ = posGoal
-    
-    angle = math.atan2(yf-yi,xf-xi)
+
+    angle = math.atan2(y-yb,x-xb)
 
     lidarData = clear_sensor(ranges,lidarRango)
-    x, y = sense_obstacles(pos, angle, lidarData)
-
-    if(once):
-        xgoal, ygoal, thgoal = rect_generator(pos, posGoal, paso_recta)
-        once = False
-        lenLine =  len(xgoal)
-        i = 0
-    if(i < lenLine):
-        
-        for j in range(len(x)):   
-            if(x[j] >= xgoal[i] - paso_recta and x[j] <= xgoal[i] + paso_recta) and (y[j] >= ygoal[i] - paso_recta and y[j] <= ygoal[i]+ paso_recta):
-                init_motor(100,0)
-                obstaculos.append(j)
-        obs = len(obstaculos)
-        if(obs > 0):
-            l = math.floor(obs/2)
-            k = obstaculos[l]
-            x_rodear, y_rodear = rodear_paralelo(pos, [x[k],y[k]], 2*paso_recta)
-            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso_recta)
-            lenLine =  len(xgoal)
-            i=0
-            obstaculos.clear()
-            again = True
-
-        init_motor(0,0)
-        motor_velocity, steer_angle = calculate_vs(xf,yf,angle,xgoal[i],ygoal[i],thgoal[i],dT)
-        i += 1
-
-    else:
-        if(again):
-            once = True
-            again = False
-        else:
-            init_motor(100,0)
-            break
+    xo, yo = sense_obstacles(pos, angle, lidarData)
+    
+    k = round(lidarRango/paso)-2
+    if(l+k < len(xgoal)):
+        for i in range(len(xo)):
+            if((xo[i] >= xgoal[l+k] - paso and xo[i] <= xgoal[l+k] + paso) and (yo[i] >= ygoal[l+k] - paso and yo[i] <= ygoal[l+k]+ paso)):
+                init_motor(100,0,0)
+                j = rodear_obstaculo([xgoal, ygoal, thgoal],l, dT, paso, lidarRango)
+                l += j
+                break 
+    #Seguir linea a la meta:
+    motor_velocity, steer_angle = calculate_vs(x,y,angle,xgoal[l],ygoal[l],thgoal[l],dT)
     #--aplicamos velocidad al motor
-    sim.simxSetJointTargetPosition(clientID, steer_handle, steer_angle, sim.simx_opmode_oneshot )
-    sim.simxSetJointTargetVelocity(clientID, motor_handle, motor_velocity, sim.simx_opmode_oneshot)  
-      
+    init_motor(0,motor_velocity,steer_angle)
     time.sleep(dT)
-  
+    l += 1
 
     # Dibuja el resultado
     plt.scatter(xgoal, ygoal, c="blue")
     plt.scatter(xg, yg, c="red", marker="X") # punto de la meta
-    plt.scatter(xf,yf,c="red") # posicion del sensor lidar en el mapa
-    plt.scatter(x,y,c="black") # posicion de los obstaculos detectados por lidar
+    plt.scatter(x,y,c="red") # posicion del sensor lidar en el mapa
+    plt.scatter(xo,yo,c="black") # posicion de los obstaculos detectados por lidar
     figure.canvas.draw()
-    figure.canvas.flush_events()
+    figure.canvas.flush_events()   
