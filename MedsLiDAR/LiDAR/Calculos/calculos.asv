@@ -1,24 +1,31 @@
+%% inicializar
+metros = [1.5, 1, 2.5, 2, 3.5, 3, 4];
+medias = []
+des = []
+
 %% extraccion de datos de la muestra
-load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaNegra\1m\DistX.mat')
-load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaNegra\1m\DistY.mat')
+load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaNegra\4m\DistX.mat')
+load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaNegra\4m\DistY.mat')
 
 largo_real = 0.33;
 errores = [];
 
-for muestra = 1:10%(length(X(1,:)))
+for muestra = 1:(length(X(1,:)))
     x1 = X(:,muestra);
     y1 = Y(:,muestra);
 
-    index = find(abs(x1)<0.7);
+    index = find(abs(x1)<0.65);
     index = rmoutliers(index,'quartiles');
-    x = x1(index(1):index(length(index)));
-    y = y1(index(1):index(length(index)));
-    [y,removed] = rmoutliers(y,'quartiles')
-       for i = 1:length(removed)
-            x.pop(x(removed))
+    x1 = x1(index(1):index(length(index)));
+    x = x1;
+    y1 = y1(index(1):index(length(index)));
+    [y,removed] = rmoutliers(y1,'median');
+    for i = 1:length(removed)
+        if(removed(i))
+            x(x==x1(i))=[];
+        end
     end
-    figure
-    scatter(x,y)
+    %scatter(x,y)
     largo_medido = abs(x(1) - x(length(x)));
     error_medicion = abs(largo_real - largo_medido);
     
@@ -26,7 +33,12 @@ for muestra = 1:10%(length(X(1,:)))
 end
 media = mean(errores)
 de = std(errores)
-
+medias = [medias; media];
+des = [des; de]
+%% Grafico de los errores
+scatter(metros, abs(medias));
+hold on
+scatter(metros, des);
 %% Calculo del error de la muestra
 largo  = 0.3;%Roja %0.33;%Negra
 

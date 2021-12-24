@@ -1,11 +1,24 @@
-%% extraccion de datos de la muestra
-load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaNegra\4m\DistX.mat')
-load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaNegra\4m\DistY.mat')
+%% inicializar
+clear all
+clc
+metros = [1.5, 1, 2.5, 2, 3.5, 3, 4];
+medias = [];
+des = [];
 
-largo_real = 0.33;
+%% extraccion de datos de la muestrar
+load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaRoja\4m\DistX.mat')
+load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaRoja\4m\DistY.mat')
+
+largo_real = 0.3;
 errores = [];
 
-for muestra = 1:(length(X(1,:)))
+if(length(X(1,:)) >= length(Y(1,:)) )
+    ld = length(Y(1,:));
+else 
+    ld = length(X(1,:));
+end
+
+for muestra = 1:ld
     x1 = X(:,muestra);
     y1 = Y(:,muestra);
 
@@ -28,7 +41,12 @@ for muestra = 1:(length(X(1,:)))
 end
 media = mean(errores)
 de = std(errores)
-
+medias = [medias; media];
+des = [des; de]
+%% Grafico de los errores
+scatter(metros, abs(medias));
+hold on
+scatter(metros, des);
 %% Calculo del error de la muestra
 largo  = 0.3;%Roja %0.33;%Negra
 
