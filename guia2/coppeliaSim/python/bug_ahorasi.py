@@ -165,10 +165,23 @@ def rodear_obstaculo(camino,lc ,dT, paso, lidarRango):
         
         for i in range(len(xo)):
             init_motor(100,0,0)
-            x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], paso)
-            #break
-            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso)
+            _, pos = sim.simxGetObjectPosition(clientID, lidar_handler, -1, sim.simx_opmode_blocking)
+            _, bodyPos = sim.simxGetObjectPosition(clientID, manta_handler,-1, sim.simx_opmode_blocking)
+
+            #pos actual
+            x, y,_ = pos
+            xi,yi,_ = bodyPos
+            angle = math.atan2(y-yi,x-xi)
+            angle_o = math.atan2(yo[i]-y,xo[i]-x)
+
+            if(angle_o > angle - math.pi/8 and angle_o < angle + math.pi/8):
+                print("frente")
+                #x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], paso)
+            else:
+                x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], paso)
             
+            xgoal, ygoal, thgoal = rect_generator(pos, [x_rodear,y_rodear,0], paso)
+
             for j in range(len(xgoal)):
 
                 _, pos = sim.simxGetObjectPosition(clientID, lidar_handler, -1, sim.simx_opmode_blocking)
