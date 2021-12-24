@@ -6,10 +6,10 @@ medias = [];
 des = [];
 
 %% extraccion de datos de la muestrar
-load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaRoja\4m\DistX.mat')
-load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaRoja\4m\DistY.mat')
+load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaRoja\2m\DistX.mat')
+load('C:\Users\juan_\Desktop\Seminario\Seminario\MedsLiDAR\LiDAR\CajaRoja\2m\DistY.mat')
 
-largo_real = 0.3;
+largo_real = 0.33;
 errores = [];
 
 if(length(X(1,:)) >= length(Y(1,:)) )
@@ -18,11 +18,16 @@ else
     ld = length(X(1,:));
 end
 
-for muestra = 1:ld
+for muestra = 1:1%ld
     x1 = X(:,muestra);
     y1 = Y(:,muestra);
-
-    index = find(abs(x1)<0.65);
+    
+    %scatter(x1,y1)
+    %title('Total de datos LiDar')
+    %ylabel('Distancia m')
+    %xlabel('Distancia m')
+    
+    index = find(abs(x1)<0.6);
     index = rmoutliers(index,'quartiles');
     x1 = x1(index(1):index(length(index)));
     x = x1;
@@ -33,7 +38,14 @@ for muestra = 1:ld
             x(x==x1(i))=[];
         end
     end
+    
+    %figure
     %scatter(x,y)
+    %title('Datos procesados LiDar')
+    %ylabel('Distancia m')
+    %xlabel('Distancia m')
+    %ylim([0,6])
+    
     largo_medido = abs(x(1) - x(length(x)));
     error_medicion = abs(largo_real - largo_medido);
     
@@ -42,7 +54,7 @@ end
 media = mean(errores);
 de = std(errores);
 medias = [medias; media];
-des = [des; de]
+des = [des; de];
 %% Grafico de los errores
 scatter(metros,medias);
 hold on
