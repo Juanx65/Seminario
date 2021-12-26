@@ -8,8 +8,8 @@ CC = 0.20;
 CB = 0.19; % ???
 %% extraccion de datos de la muestrar
 Archivo = ["1_5";"1";"2_5";"2";"3_5";"3";"4"];
-Caja = ["Cafe";"Negra";"Roja"];
-LC = [CC,CN,CR];
+Caja = ["Blanca";"Cafe";"Negra";"Roja"];
+LC = [CB,CC,CN,CR];
 for j = 1:length(Caja)
     medias = [];
     des = [];
@@ -60,9 +60,13 @@ for j = 1:length(Caja)
             %xlabel('Distancia m')
             %ylim([0,6])
 
-            largo_medido = abs(x(1) - x(length(x)));
-            error_medicion = abs(largo_real - largo_medido);
-
+            [p1, p2] = polyfit(x,y,1);
+            error_medicion = 0;
+            for z = 1:length(x)
+                error = abs(y(z)-(x(z)*p1(1)+p1(2)));
+                error_medicion = error_medicion + error;
+            end
+            error_medicion = error_medicion/length(x);
             errores = [errores; error_medicion];
         end
         media = mean(errores);
