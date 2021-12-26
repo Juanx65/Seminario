@@ -79,11 +79,3 @@ for j = 1:length(Caja)
     ylabel('Error [m]')
     legend('Media', 'DE');
 end
-%% Grafico de los errores
-scatter(metros,medias);
-hold on
-scatter(metros, des);
-title('Media y DE del Error para Caja Negra, 271 muestras');
-xlabel('Distancia de LiDar a la Caja [m]');
-ylabel('Error [m]')
-legend('Media', 'DE');
