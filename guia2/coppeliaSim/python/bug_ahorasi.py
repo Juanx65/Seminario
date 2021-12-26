@@ -175,8 +175,11 @@ def rodear_obstaculo(camino,lc ,dT, paso, lidarRango):
             angle_o = math.atan2(yo[i]-y,xo[i]-x)
 
             if(angle_o > angle - math.pi/8 and angle_o < angle + math.pi/8):
-                print("frente")
-                #x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], paso)
+                motor_velocity = 10
+                steer_angle = math.pi/2
+                init_motor(0,motor_velocity,steer_angle)
+                time.sleep(dT)
+                break
             else:
                 x_rodear, y_rodear = rodear_paralelo(pos, [xo[i],yo[i]], paso)
             
