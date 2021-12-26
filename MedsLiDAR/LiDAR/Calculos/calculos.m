@@ -6,6 +6,7 @@ CN = 0.33;
 CR = 0.30;
 CC = 0.20; 
 CB = 0.19; % ???
+
 %% extraccion de datos de la muestrar
 Archivo = ["1_5";"1";"2_5";"2";"3_5";"3";"4"];
 Caja = ["Blanca";"Cafe";"Negra";"Roja"];
@@ -74,12 +75,16 @@ for j = 1:length(Caja)
         medias = [medias; media];
         des = [des; de];
     end
-    figure
-    scatter(metros,medias);
+    %scatter(metros,medias, 'DisplayName', strcat('Media Caja', Caja(j)));
     hold on
-    scatter(metros, des);
-    title('Media y DE del Error para Caja '+ Caja(j));
+    scatter(metros, des, 'DisplayName', strcat('DE Caja', Caja(j)));
+    title('Desviacion Estandar del Error');
     xlabel('Distancia de LiDar a la Caja [m]');
     ylabel('Error [m]')
-    legend('Media', 'DE');
+    ylim([0,0.0015])
+    %legend(strcat('Media', Caja(j)), strcat('DE', Caja(j)));
 end
+hold off
+legend show
+%% Solo un grafico
+
